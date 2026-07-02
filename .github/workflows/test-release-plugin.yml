@@ -1,0 +1,34 @@
+name: Test Release Plugin Workflow
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "prompts/**"
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate workflow YAML syntax
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import yaml
+          for path in pathlib.Path(".github/workflows").glob("*.yml"):
+              yaml.safe_load(path.read_text())
+              print(f"OK {path}")
+          PY
+
+      - name: Dry-run suggest-version script
+        run: node scripts/suggest-version.mjs --dry-run --version 1.0.0

@@ -1,0 +1,149 @@
+name: Release Plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin_name:
+        required: true
+        type: string
+      version_file:
+        required: true
+        type: string
+      release_title_prefix:
+        required: true
+        type: string
+      catalog_repo:
+        required: false
+        type: string
+        default: WeZZard/skills
+      source_repo:
+        required: false
+        type: string
+        default: ""
+      pre_validate_command:
+        required: false
+        type: string
+        default: ""
+      event_name:
+        required: true
+        type: string
+      dispatch_tag:
+        required: false
+        type: string
+        default: ""
+      dispatch_version:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      RELEASE_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        if: inputs.pre_validate_command != ''
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Detect version bump
+        id: meta
+        env:
+          EVENT_NAME: ${{ inputs.event_name }}
+          DISPATCH_TAG: ${{ inputs.dispatch_tag }}
+          DISPATCH_VERSION: ${{ inputs.dispatch_version }}
+          VERSION_FILE: ${{ inputs.version_file }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$DISPATCH_TAG"
+            VERSION="$DISPATCH_VERSION"
+            if [ -z "$VERSION" ]; then
+              VERSION="${TAG#v}"
+            fi
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CURRENT=$(jq -r '.version' "$VERSION_FILE")
+          PREVIOUS=$(git show "HEAD~1:${VERSION_FILE}" 2>/dev/null | jq -r '.version' || echo "")
+          if [ -z "$CURRENT" ] || [ "$CURRENT" = "null" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$CURRENT" = "$PREVIOUS" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "tag=v${CURRENT}" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-validate build
+        if: steps.meta.outputs.skip != 'true' && inputs.pre_validate_command != ''
+        run: ${{ inputs.pre_validate_command }}
+
+      - name: Validate plugin
+        if: steps.meta.outputs.skip != 'true'
+        run: npx --yes @anthropic-ai/claude-code@latest plugin validate .
+
+      - name: Create tag and release
+        if: steps.meta.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_TITLE_PREFIX: ${{ inputs.release_title_prefix }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on remote — skipping tag push"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "${RELEASE_TITLE_PREFIX} ${VERSION}" --generate-notes
+
+      - name: Dispatch catalog sync
+        if: steps.meta.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PLUGIN_NAME: ${{ inputs.plugin_name }}
+          CATALOG_REPO: ${{ inputs.catalog_repo }}
+          SOURCE_REPO: ${{ inputs.source_repo }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
+          REPO="${SOURCE_REPO:-$GITHUB_REPOSITORY}"
+          RELEASE_SHA=$(git ls-remote origin "refs/tags/${TAG}^{}" | awk 'NR==1 {print $1}')
+          if [ -z "$RELEASE_SHA" ]; then
+            RELEASE_SHA=$(git ls-remote origin "refs/tags/${TAG}" | awk 'NR==1 {print $1}')
+          fi
+          if [ -z "$RELEASE_SHA" ]; then
+            RELEASE_SHA="${{ github.sha }}"
+          fi
+          RELEASE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+          gh api "repos/${CATALOG_REPO}/dispatches" \
+            -f event_type=sync-plugin \
+            -f "client_payload[release_id]=$RELEASE_ID" \
+            -f "client_payload[plugin]=$PLUGIN_NAME" \
+            -f "client_payload[version]=$VERSION" \
+            -f "client_payload[tag]=${TAG}" \
+            -f "client_payload[sha]=${RELEASE_SHA}" \
+            -f "client_payload[repo]=${REPO}"
+          echo "Dispatched sync-plugin release_id=$RELEASE_ID sha=$RELEASE_SHA"
