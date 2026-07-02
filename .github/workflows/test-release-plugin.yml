@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install OpenCode CLI
+        run: curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+
       - name: Validate workflow YAML syntax
         run: |
           set -euo pipefail

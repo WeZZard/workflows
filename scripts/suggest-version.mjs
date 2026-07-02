@@ -2,7 +2,7 @@
 
 /**
  * Suggest next semver from conventional commits since the latest git tag.
- * Reads current version from a plugin.json or manifest.json file.
+ * Uses OpenCode when available; falls back to deterministic rules.
  *
  * Usage:
  *   node suggest-version.mjs --version-file .claude-plugin/plugin.json
@@ -11,7 +11,13 @@
 
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { parseArgs } from "util";
+import { isOpenCodeAvailable, runOpenCodePrompt } from "./opencode-run.mjs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SEMVER_PROMPT = join(__dirname, "../prompts/semver-propose-version.md");
 
 const { values: args } = parseArgs({
   options: {
@@ -86,6 +92,55 @@ function classifyBump(messages) {
   return bump;
 }
 
+function deterministicSuggest(versionFile) {
+  const current = readVersionFromFile(versionFile);
+  const tag = gitLatestTag();
+  const messages = commitsSince(tag);
+  const bumpKind = messages.length === 0 ? "patch" : classifyBump(messages);
+  const next = bump(current, bumpKind);
+  return {
+    current,
+    next,
+    bump: bumpKind,
+    sinceTag: tag,
+    commits: messages.length,
+    source: "deterministic",
+  };
+}
+
+function opencodeSuggest(versionFile) {
+  const tag = gitLatestTag();
+  const messages = commitsSince(tag);
+  const current = readVersionFromFile(versionFile);
+  const prompt = [
+    "Propose the next semver for this plugin release.",
+    "Use the attached semver prompt for rules.",
+    `Current version: ${current}`,
+    `Latest tag: ${tag ?? "(none)"}`,
+    "",
+    "Commits since tag:",
+    messages.length ? messages.map((m) => `- ${m}`).join("\n") : "- (none)",
+    "",
+    "Return ONLY JSON: { current, next, bump, rationale }",
+  ].join("\n");
+
+  const result = runOpenCodePrompt({
+    prompt,
+    promptFile: SEMVER_PROMPT,
+    files: [versionFile],
+  });
+
+  return {
+    current: result.current ?? current,
+    next: result.next,
+    bump: result.bump,
+    sinceTag: tag,
+    commits: messages.length,
+    rationale: result.rationale ?? null,
+    source: "opencode",
+  };
+}
+
 function main() {
   if (args["dry-run"]) {
     const current = args.version ?? "1.0.0";
@@ -98,6 +153,7 @@ function main() {
           next,
           bump: "patch",
           commits: 0,
+          source: "deterministic",
         },
         null,
         2,
@@ -111,25 +167,18 @@ function main() {
     throw new Error("Missing --version-file");
   }
 
-  const current = readVersionFromFile(versionFile);
-  const tag = gitLatestTag();
-  const messages = commitsSince(tag);
-  const bumpKind = messages.length === 0 ? "patch" : classifyBump(messages);
-  const next = bump(current, bumpKind);
+  if (isOpenCodeAvailable()) {
+    try {
+      console.log(JSON.stringify(opencodeSuggest(versionFile), null, 2));
+      return;
+    } catch (error) {
+      console.warn(
+        `OpenCode semver proposal failed, using deterministic fallback: ${error.message}`,
+      );
+    }
+  }
 
-  console.log(
-    JSON.stringify(
-      {
-        current,
-        next,
-        bump: bumpKind,
-        sinceTag: tag,
-        commits: messages.length,
-      },
-      null,
-      2,
-    ),
-  );
+  console.log(JSON.stringify(deterministicSuggest(versionFile), null, 2));
 }
 
 main();

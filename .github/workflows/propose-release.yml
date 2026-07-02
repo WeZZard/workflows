@@ -13,6 +13,8 @@ on:
     secrets:
       RELEASE_TOKEN:
         required: true
+      OPENCODE_AUTH_JSON:
+        required: false
 
 permissions:
   contents: write
@@ -30,13 +32,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: WeZZard/workflows
-          ref: v1.0.0
+          ref: v1.0.1
           path: wezzard-workflows
           token: ${{ secrets.RELEASE_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install OpenCode CLI
+        run: curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+
+      - name: Configure OpenCode auth
+        env:
+          OPENCODE_AUTH_JSON: ${{ secrets.OPENCODE_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/opencode"
+          if [ -n "${OPENCODE_AUTH_JSON:-}" ]; then
+            echo "$OPENCODE_AUTH_JSON" > "$HOME/.local/share/opencode/auth.json"
+            chmod 600 "$HOME/.local/share/opencode/auth.json"
+          fi
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
 
       - name: Suggest next version
         id: suggest
