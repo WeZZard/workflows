@@ -1,0 +1,32 @@
+{
+  "name": "@wezzard/workflows",
+  "version": "2.0.0",
+  "description": "Shared deterministic release workflows and local Pi-powered release tooling",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "wezzard-release": "bin/wezzard-release.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    ".pi/settings.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "pack:check": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.81.1"
+  },
+  "devDependencies": {
+    "yaml": "2.9.0"
+  },
+  "license": "MIT"
+}
