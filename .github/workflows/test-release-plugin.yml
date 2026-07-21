@@ -1,11 +1,17 @@
-name: Test Release Plugin Workflow
+name: Test Release Tooling
 
 on:
   pull_request:
     paths:
       - ".github/workflows/**"
+      - ".pi/**"
+      - "bin/**"
+      - "skills/**"
       - "scripts/**"
-      - "prompts/**"
+      - "src/**"
+      - "test/**"
+      - "package.json"
+      - "package-lock.json"
   push:
     branches: [main]
 
@@ -17,21 +23,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.19.0
+          cache: npm
 
-      - name: Install OpenCode CLI
-        run: curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path
+      - name: Install dependencies
+        run: npm ci
 
       - name: Validate workflow YAML syntax
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import pathlib
-          import yaml
-          for path in pathlib.Path(".github/workflows").glob("*.yml"):
-              yaml.safe_load(path.read_text())
-              print(f"OK {path}")
-          PY
+        run: node scripts/validate-workflows.mjs
 
-      - name: Dry-run suggest-version script
-        run: node scripts/suggest-version.mjs --dry-run --version 1.0.0
+      - name: Test local release tool
+        run: npm test
+
+      - name: Verify Git package contents
+        run: npm run pack:check
