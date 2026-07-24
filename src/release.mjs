@@ -3,9 +3,8 @@ import { loadVersionBumpExamples } from "./examples.mjs";
 import { createGitClient } from "./git.mjs";
 import { createGitHubClient } from "./github.mjs";
 import {
-  detectManifest,
-  readManifestVersion,
-  writeManifestVersion,
+  detectVersionSet,
+  writeVersionSet,
 } from "./manifest.mjs";
 import { classifyWithRetry, createPiClient } from "./pi.mjs";
 import { bumpVersion, highestBump, stableVersionFromTag } from "./semver.mjs";
@@ -34,6 +33,7 @@ export function buildPullRequestBody(result) {
     `Base tag: ${result.sinceTag ?? `none (unpublished manifest baseline ${result.current})`}`,
     `Commits: ${result.commits}`,
     `Diff chunks: ${result.chunks}`,
+    `Version files: ${result.versionFiles.join(", ")}`,
     formatModelSelection(result.pi),
     "",
     "## Rationale",
@@ -65,7 +65,7 @@ function rollbackReleaseMutation({
   git,
   branch,
   defaultBranch,
-  manifestPath,
+  versionPaths,
   branchCreated,
   pushAttempted,
   pushCompleted,
@@ -97,7 +97,9 @@ function rollbackReleaseMutation({
   if (branchCreated) {
     const currentBranch = attempt("inspect the current branch", () => git.currentBranch());
     if (currentBranch === branch) {
-      attempt(`restore ${manifestPath}`, () => git.restorePath(manifestPath));
+      for (const path of versionPaths) {
+        attempt(`restore ${path}`, () => git.restorePath(path));
+      }
     }
     if (currentBranch !== defaultBranch) {
       attempt(`return to ${defaultBranch}`, () => git.switchBranch(defaultBranch));
@@ -157,9 +159,8 @@ export function proposeRelease(
   const github = dependencies.github ?? createGitHubClient(repositoryRoot);
   const pi = dependencies.pi ?? createPiClient({ cwd: repositoryRoot });
   const loadExamples = dependencies.loadExamples ?? loadVersionBumpExamples;
-  const readVersion = dependencies.readVersion ?? readManifestVersion;
-  const writeVersion = dependencies.writeVersion ?? writeManifestVersion;
-  const findManifest = dependencies.findManifest ?? detectManifest;
+  const findVersionSet = dependencies.findVersionSet ?? detectVersionSet;
+  const writeVersions = dependencies.writeVersions ?? writeVersionSet;
 
   const dirty = git.status();
   if (dirty.trim()) {
@@ -192,8 +193,9 @@ export function proposeRelease(
     );
   }
 
-  const manifest = findManifest(repositoryRoot, versionFile);
-  const current = readVersion(manifest.absolutePath);
+  const versionSet = findVersionSet(repositoryRoot, versionFile);
+  const current = versionSet.current;
+  const versionPaths = versionSet.files.map(({ relativePath }) => relativePath);
   const sinceTag = git.latestStableTag();
   validateVersionBaseline(current, sinceTag);
   const commits = git.commitCount(sinceTag);
@@ -237,7 +239,8 @@ export function proposeRelease(
     sinceTag,
     commits,
     chunks: chunks.length,
-    versionFile: manifest.relativePath,
+    versionFile: versionSet.primary.relativePath,
+    versionFiles: versionPaths,
     branch,
     classifications,
     pi: {
@@ -258,12 +261,18 @@ export function proposeRelease(
   try {
     branchCreated = true;
     git.createBranch(branch);
-    writeVersion(manifest.absolutePath, current, next);
-    git.stage(manifest.relativePath);
-    const stagedPaths = git.stagedPaths();
-    if (stagedPaths.length !== 1 || stagedPaths[0] !== manifest.relativePath) {
+    writeVersions(versionSet, current, next);
+    for (const path of versionPaths) {
+      git.stage(path);
+    }
+    const stagedPaths = git.stagedPaths().toSorted();
+    const expectedPaths = versionPaths.toSorted();
+    if (
+      stagedPaths.length !== expectedPaths.length ||
+      stagedPaths.some((path, index) => path !== expectedPaths[index])
+    ) {
       throw new Error(
-        `Release commit must contain only ${manifest.relativePath}; staged: ${stagedPaths.join(", ") || "none"}`,
+        `Release commit must contain exactly ${expectedPaths.join(", ")}; staged: ${stagedPaths.join(", ") || "none"}`,
       );
     }
     git.commit(`release: bump to ${next} (${bump})`);
@@ -284,7 +293,7 @@ export function proposeRelease(
       git,
       branch,
       defaultBranch,
-      manifestPath: manifest.relativePath,
+      versionPaths,
       branchCreated,
       pushAttempted,
       pushCompleted,

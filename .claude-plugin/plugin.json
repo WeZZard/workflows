@@ -1,0 +1,9 @@
+{
+  "name": "workflows",
+  "description": "Run shared WeZZard workflows from local coding agents without copying workflow infrastructure into each repository.",
+  "version": "2.1.0",
+  "author": {
+    "name": "WeZZard",
+    "email": "me@wezzard.com"
+  }
+}

@@ -36,7 +36,7 @@ test("runs pinned Pi with only the exact skill and model overrides", () => {
   const pi = createPiClient({
     cwd: "/repo",
     piCliPath: "/package/dist/cli.js",
-    skillPath: "/package/skills/version-bump/SKILL.md",
+    skillPath: "/package/internal/skills/version-bump/SKILL.md",
     execute(command, args, options) {
       invocation = { command, args, options };
       return {
@@ -66,7 +66,7 @@ test("runs pinned Pi with only the exact skill and model overrides", () => {
     "--no-extensions",
     "--no-skills",
     "--skill",
-    "/package/skills/version-bump/SKILL.md",
+    "/package/internal/skills/version-bump/SKILL.md",
     "--no-context-files",
     "--no-prompt-templates",
     "--no-themes",

@@ -24,11 +24,30 @@ test("a pull-request failure restores a real repository and removes only the pus
   git(repository, ["remote", "add", "origin", origin]);
 
   mkdirSync(join(repository, ".claude-plugin"));
+  mkdirSync(join(repository, ".codex-plugin"));
   const manifest = join(repository, ".claude-plugin/plugin.json");
   const originalManifest = '{\n  "name": "fixture",\n  "version": "1.2.3"\n}\n';
   writeFileSync(manifest, originalManifest);
+  const originalVersionFiles = new Map([
+    [".claude-plugin/plugin.json", originalManifest],
+    [
+      ".codex-plugin/plugin.json",
+      '{\n  "name": "fixture",\n  "version": "1.2.3"\n}\n',
+    ],
+    [
+      "package.json",
+      '{\n  "name": "fixture",\n  "version": "1.2.3"\n}\n',
+    ],
+    [
+      "package-lock.json",
+      '{\n  "name": "fixture",\n  "version": "1.2.3",\n  "lockfileVersion": 3,\n  "packages": {\n    "": {\n      "name": "fixture",\n      "version": "1.2.3"\n    }\n  }\n}\n',
+    ],
+  ]);
+  for (const [path, contents] of [...originalVersionFiles].slice(1)) {
+    writeFileSync(join(repository, path), contents);
+  }
   writeFileSync(join(repository, "README.md"), "initial\n");
-  git(repository, ["add", ".claude-plugin/plugin.json", "README.md"]);
+  git(repository, ["add", ...originalVersionFiles.keys(), "README.md"]);
   git(repository, ["commit", "--message", "initial"]);
   git(repository, ["tag", "v1.2.3"]);
   writeFileSync(join(repository, "README.md"), "initial\nnew command\n");
@@ -61,7 +80,9 @@ test("a pull-request failure restores a real repository and removes only the pus
   assert.equal(git(repository, ["branch", "--show-current"]).stdout.trim(), "main");
   assert.equal(git(repository, ["rev-parse", "HEAD"]).stdout.trim(), originalHead);
   assert.equal(git(repository, ["status", "--porcelain=v1"]).stdout, "");
-  assert.equal(readFileSync(manifest, "utf8"), originalManifest);
+  for (const [path, original] of originalVersionFiles) {
+    assert.equal(readFileSync(join(repository, path), "utf8"), original);
+  }
   assert.equal(
     git(repository, ["show-ref", "--verify", "--quiet", "refs/heads/release/1.3.0"], [0, 1])
       .status,
