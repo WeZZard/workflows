@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { runProcess } from "./process.mjs";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-export const VERSION_BUMP_SKILL = join(packageRoot, "skills/version-bump/SKILL.md");
+export const VERSION_BUMP_SKILL = join(packageRoot, "internal/skills/version-bump/SKILL.md");
 export const PI_TIMEOUT_MS = 15 * 60 * 1000;
 
 export function resolvePinnedPiCli() {

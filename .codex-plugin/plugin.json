@@ -1,0 +1,24 @@
+{
+  "name": "workflows",
+  "version": "2.1.0",
+  "description": "Run shared WeZZard workflows from local coding agents without copying workflow infrastructure into each repository.",
+  "author": {
+    "name": "WeZZard",
+    "email": "me@wezzard.com"
+  },
+  "homepage": "https://github.com/WeZZard/workflows",
+  "repository": "https://github.com/WeZZard/workflows",
+  "license": "MIT",
+  "keywords": [
+    "release",
+    "semver",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Workflows",
+    "shortDescription": "Run shared local release workflows",
+    "developerName": "WeZZard",
+    "websiteURL": "https://github.com/WeZZard/workflows"
+  }
+}

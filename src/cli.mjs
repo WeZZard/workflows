@@ -7,7 +7,7 @@ Create a Pi-classified SemVer release pull request from the synchronized default
 
 Options:
   --dry-run              Classify without creating a branch, commit, push, or pull request
-  --version-file <path>  Override manifest auto-detection
+  --version-file <path>  Update only this version file
   --provider <name>      Override Pi's configured provider
   --model <id>           Override Pi's configured model
   --thinking <level>     Override Pi's configured thinking level

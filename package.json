@@ -1,14 +1,23 @@
 {
   "name": "@wezzard/workflows",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Shared deterministic release workflows and local Pi-powered release tooling",
   "type": "module",
   "private": true,
+  "author": "WeZZard <me@wezzard.com>",
+  "homepage": "https://github.com/WeZZard/workflows",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WeZZard/workflows.git"
+  },
   "bin": {
     "wezzard-release": "bin/wezzard-release.mjs"
   },
   "files": [
+    ".claude-plugin",
+    ".codex-plugin",
     "bin",
+    "internal",
     "src",
     "skills",
     ".pi/settings.json",
@@ -27,6 +36,17 @@
   },
   "devDependencies": {
     "yaml": "2.9.0"
+  },
+  "keywords": [
+    "pi-package",
+    "release",
+    "semver",
+    "workflow"
+  ],
+  "pi": {
+    "skills": [
+      "./skills/propose-release"
+    ]
   },
   "license": "MIT"
 }
